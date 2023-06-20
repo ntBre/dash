@@ -65,12 +65,26 @@ impl Fetch {
     }
 }
 
+#[derive(Deserialize)]
+struct Projects {
+    project: Vec<Project>,
+}
+
 impl Project {
-    /// Deserialize a [Project] from the TOML file at `path`.
-    fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
+    /// Deserialize a set of [Project]s from the TOML file at `path`, and update
+    /// them using [Project::update].
+    fn load(
+        path: impl AsRef<Path>,
+        temp: impl AsRef<Path>,
+    ) -> anyhow::Result<Vec<Self>> {
         let toml = read_to_string(path)?;
-        let res = toml::from_str(&toml)?;
-        Ok(res)
+        let mut projects: Projects = toml::from_str(&toml)?;
+
+        for p in projects.project.iter_mut() {
+            p.update(&temp)?;
+        }
+
+        Ok(projects.project)
     }
 
     /// Retrieve the remote files for `self`, storing temporary files in `temp`.
@@ -101,6 +115,14 @@ impl Project {
         let now = Instant::now();
         now.duration_since(self.last_updated).as_secs() > self.update_interval
     }
+
+    fn update(&mut self, temp: impl AsRef<Path>) -> anyhow::Result<()> {
+        let fetch = self.fetch(temp)?;
+        let data = fetch.parse();
+        self.data = data;
+        self.last_updated = Instant::now();
+        Ok(())
+    }
 }
 
 mod gui {
@@ -122,8 +144,8 @@ mod gui {
     pub(crate) struct MyApp {
         temp: PathBuf,
         projects: Vec<Project>,
-        sender: Sender<(usize, PathBuf, super::Project)>,
-        receiver: Receiver<(usize, Vec<[f64; 2]>)>,
+        sender: Sender<(usize, PathBuf, Project)>,
+        receiver: Receiver<(usize, Project)>,
     }
 
     impl MyApp {
@@ -133,10 +155,9 @@ mod gui {
             let (inner_sender, receiver) = channel();
 
             thread::spawn(move || {
-                while let Ok((i, temp, project)) = inner_receiver.recv() {
-                    let fetch = project.fetch(temp).unwrap();
-                    let out = fetch.parse();
-                    inner_sender.send((i, out)).unwrap();
+                while let Ok((i, temp, mut project)) = inner_receiver.recv() {
+                    project.update(temp).unwrap();
+                    inner_sender.send((i, project)).unwrap();
                 }
             });
 
@@ -193,10 +214,8 @@ mod gui {
                     });
             }
 
-            while let Ok((idx, data)) = self.receiver.try_recv() {
-                let p = &mut self.projects[idx];
-                p.data = data;
-                p.last_updated = Instant::now();
+            while let Ok((idx, project)) = self.receiver.try_recv() {
+                self.projects[idx] = project;
             }
         }
     }
@@ -205,11 +224,9 @@ mod gui {
 fn main() -> anyhow::Result<()> {
     let temp = tempdir()?;
 
-    let mut project = Project::load("test.toml")?;
-    let fetch = project.fetch(&temp)?;
-    project.data = fetch.parse();
+    let projects = Project::load("test.toml", &temp)?;
 
-    let app = MyApp::new(temp.clone(), vec![project]);
+    let app = MyApp::new(temp.clone(), projects);
 
     const PROGRAM_TITLE: &str = "dash";
     eframe::run_native(
