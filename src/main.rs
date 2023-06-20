@@ -3,6 +3,7 @@ use std::{
     io::{self, Read},
     path::Path,
     process::Command,
+    time::Instant,
 };
 
 use chrono::{DateTime, Local};
@@ -18,13 +19,31 @@ fn tempdir() -> io::Result<std::path::PathBuf> {
     Ok(dir)
 }
 
-#[derive(Deserialize)]
+const fn default_interval() -> u64 {
+    60
+}
+
+#[derive(Clone, Deserialize)]
 struct Project {
+    name: String,
     host: String,
     path: String,
+
+    #[serde(default = "Instant::now")]
+    #[serde(skip_deserializing)]
+    last_updated: Instant,
+
+    /// update interval in seconds
+    #[serde(default = "default_interval")]
+    update_interval: u64,
+
+    #[serde(default)]
+    #[serde(skip_deserializing)]
+    data: Vec<[f64; 2]>,
 }
 
 struct Fetch {
+    #[allow(unused)]
     last_modified: DateTime<Local>,
     contents: String,
 }
@@ -47,17 +66,6 @@ impl Fetch {
 }
 
 impl Project {
-    #[allow(unused)]
-    fn new<S>(host: S, path: S) -> Self
-    where
-        S: Into<String>,
-    {
-        Self {
-            host: host.into(),
-            path: path.into(),
-        }
-    }
-
     /// Deserialize a [Project] from the TOML file at `path`.
     fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let toml = read_to_string(path)?;
@@ -70,6 +78,7 @@ impl Project {
     fn fetch(&self, temp: impl AsRef<Path>) -> anyhow::Result<Fetch> {
         let path = format!("{host}:{path}", host = self.host, path = self.path);
         let output = temp.as_ref().join("path.dat");
+        eprintln!("calling fetch on {path} at {}", Local::now());
         let mut cmd = Command::new("scp");
         cmd.arg("-p") // preserve mod times
             .arg(path)
@@ -87,22 +96,67 @@ impl Project {
             contents,
         })
     }
+
+    fn needs_update(&self) -> bool {
+        let now = Instant::now();
+        now.duration_since(self.last_updated).as_secs() > self.update_interval
+    }
 }
 
 mod gui {
+    use std::{
+        path::PathBuf,
+        sync::mpsc::{channel, Receiver, Sender},
+        thread,
+        time::Instant,
+    };
+
     use eframe::App;
     use egui::{
         plot::{Line, Plot, PlotPoints},
         Color32, Window,
     };
 
+    use crate::Project;
+
     pub(crate) struct MyApp {
-        data: Vec<[f64; 2]>,
+        temp: PathBuf,
+        projects: Vec<Project>,
+        sender: Sender<(usize, PathBuf, super::Project)>,
+        receiver: Receiver<(usize, Vec<[f64; 2]>)>,
     }
 
     impl MyApp {
-        pub(crate) fn new(data: Vec<[f64; 2]>) -> Self {
-            Self { data }
+        pub(crate) fn new(temp: PathBuf, projects: Vec<Project>) -> Self {
+            let (sender, inner_receiver) =
+                channel::<(usize, PathBuf, super::Project)>();
+            let (inner_sender, receiver) = channel();
+
+            thread::spawn(move || {
+                while let Ok((i, temp, project)) = inner_receiver.recv() {
+                    let fetch = project.fetch(temp).unwrap();
+                    let out = fetch.parse();
+                    inner_sender.send((i, out)).unwrap();
+                }
+            });
+
+            Self {
+                projects,
+                sender,
+                receiver,
+                temp,
+            }
+        }
+
+        /// Queue an update request for the project in `idx`
+        fn request_update(&mut self, idx: usize) {
+            // set this here so we don't keep queueing updates on the same
+            // project
+            self.projects[idx].last_updated = Instant::now();
+            let p = &self.projects[idx];
+            self.sender
+                .send((idx, self.temp.clone(), p.clone()))
+                .unwrap();
         }
     }
 
@@ -118,31 +172,44 @@ mod gui {
                 });
             });
 
-            Window::new("plot window")
-                .default_size([400.0, 400.0])
-                .show(ctx, |ui| {
-                    Plot::new("job progress").show(ui, |plot_ui| {
-                        plot_ui.line(
-                            Line::new(PlotPoints::new(self.data.clone()))
+            for i in 0..self.projects.len() {
+                if self.projects[i].needs_update() {
+                    self.request_update(i);
+                }
+
+                let project = &self.projects[i];
+                Window::new(&project.name)
+                    .default_size([400.0, 400.0])
+                    .show(ctx, |ui| {
+                        Plot::new(&project.path).show(ui, |plot_ui| {
+                            plot_ui.line(
+                                Line::new(PlotPoints::new(
+                                    project.data.clone(),
+                                ))
                                 .color(Color32::from_rgb(200, 100, 100))
                                 .name("wave"),
-                        );
+                            );
+                        });
                     });
-                });
+            }
+
+            while let Ok((idx, data)) = self.receiver.try_recv() {
+                let p = &mut self.projects[idx];
+                p.data = data;
+                p.last_updated = Instant::now();
+            }
         }
     }
 }
 
 fn main() -> anyhow::Result<()> {
-    let project = Project::load("test.toml")?;
     let temp = tempdir()?;
 
+    let mut project = Project::load("test.toml")?;
     let fetch = project.fetch(&temp)?;
+    project.data = fetch.parse();
 
-    println!("last modified at {m}", m = fetch.last_modified);
-    println!("contents:\n{c}", c = fetch.contents);
-
-    let app = MyApp::new(fetch.parse());
+    let app = MyApp::new(temp.clone(), vec![project]);
 
     const PROGRAM_TITLE: &str = "dash";
     eframe::run_native(
