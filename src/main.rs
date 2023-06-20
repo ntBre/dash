@@ -85,7 +85,26 @@ impl Fetch {
     }
 
     fn parse_pbqff(&self) -> Vec<[f64; 2]> {
-        todo!()
+        let mut ret = Vec::new();
+        let mut did_drop = false;
+        for line in self.contents.lines() {
+            if line.starts_with("finished dropping") {
+                did_drop = true;
+            }
+            if line.starts_with("[iter ") {
+                // only track the current phase of the QFF. if we dropped and
+                // found more [iter ...] lines, we've entered a new phase
+                if did_drop {
+                    did_drop = false;
+                    ret.clear();
+                }
+                let sp: Vec<_> = line.split_ascii_whitespace().collect();
+                let i = sp[1].parse().unwrap();
+                let remaining = sp[7].parse().unwrap();
+                ret.push([i, remaining]);
+            }
+        }
+        ret
     }
 }
 
