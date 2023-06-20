@@ -8,10 +8,24 @@ use std::{
 use chrono::{DateTime, Local};
 use serde::Deserialize;
 
+/// create a temporary directory and return its path
+fn tempdir() -> io::Result<std::path::PathBuf> {
+    let base = std::env::temp_dir();
+    let pid = std::process::id();
+    let dir = base.join(format!("dash.{pid}"));
+    create_dir_all(&dir)?;
+    Ok(dir)
+}
+
 #[derive(Deserialize)]
 struct Project {
     host: String,
     path: String,
+}
+
+struct Fetch {
+    last_modified: DateTime<Local>,
+    contents: String,
 }
 
 impl Project {
@@ -32,39 +46,42 @@ impl Project {
         let res = toml::from_str(&toml)?;
         Ok(res)
     }
-}
 
-/// create a temporary directory and return its path
-fn tempdir() -> io::Result<std::path::PathBuf> {
-    let base = std::env::temp_dir();
-    let pid = std::process::id();
-    let dir = base.join(format!("dash.{pid}"));
-    create_dir_all(&dir)?;
-    Ok(dir)
+    /// Retrieve the remote files for `self`, storing temporary files in `temp`.
+    /// Returns a [Fetch] containing the resulting data.
+    fn fetch(&self, temp: impl AsRef<Path>) -> anyhow::Result<Fetch> {
+        let path = format!("{host}:{path}", host = self.host, path = self.path);
+        let output = temp.as_ref().join("path.dat");
+        let mut cmd = Command::new("scp");
+        cmd.arg("-p") // preserve mod times
+            .arg(path)
+            .arg(&output);
+        cmd.status()?;
+        let mut file = std::fs::File::open(output)?;
+        let meta = file.metadata()?;
+        let modified = meta.modified()?;
+        let last_modified: DateTime<Local> = DateTime::from(modified);
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+
+        Ok(Fetch {
+            last_modified,
+            contents,
+        })
+    }
 }
 
 fn main() -> anyhow::Result<()> {
     let project = Project::load("test.toml")?;
     let temp = tempdir()?;
-    let path =
-        format!("{host}:{path}", host = project.host, path = project.path);
-    let output = temp.join("path.dat");
-    let mut cmd = Command::new("scp");
-    cmd.arg("-p") // preserve mod times
-        .arg(path)
-        .arg(&output);
-    if cmd.status().is_err() {
-        eprintln!("failed to run command!");
-    } else {
-        let mut file = std::fs::File::open(output)?;
-        let meta = file.metadata()?;
-        let modified = meta.modified()?;
-        let time: DateTime<Local> = DateTime::from(modified);
-        println!("last modified at {time}");
-        let mut buf = String::new();
-        file.read_to_string(&mut buf)?;
-        println!("contents:\n{}", buf);
+
+    let fetch = project.fetch(&temp);
+
+    if let Ok(f) = fetch {
+        println!("last modified at {m}", m = f.last_modified);
+        println!("contents:\n{c}", c = f.contents);
     }
+
     match remove_dir_all(temp) {
         Ok(_) => (),
         Err(e) => eprintln!("{e}"),
