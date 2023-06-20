@@ -28,6 +28,23 @@ struct Fetch {
     contents: String,
 }
 
+impl Fetch {
+    /// parse `self` into a sequence of data points for plotting by egui
+    fn parse(&self) -> Vec<[f64; 2]> {
+        let mut i = 0;
+        let mut ret = Vec::new();
+        for line in self.contents.lines() {
+            let mut sp = line.split_ascii_whitespace();
+            if sp.next().is_some_and(|s| s.chars().all(|c| c.is_numeric())) {
+                let s = sp.next().unwrap().parse().unwrap();
+                ret.push([i as f64, s]);
+                i += 1;
+            }
+        }
+        ret
+    }
+}
+
 impl Project {
     #[allow(unused)]
     fn new<S>(host: S, path: S) -> Self
