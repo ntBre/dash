@@ -6,6 +6,7 @@ use std::{
 };
 
 use chrono::{DateTime, Local};
+use gui::MyApp;
 use serde::Deserialize;
 
 /// create a temporary directory and return its path
@@ -88,16 +89,68 @@ impl Project {
     }
 }
 
+mod gui {
+    use eframe::App;
+    use egui::{
+        plot::{Line, Plot, PlotPoints},
+        Color32, Window,
+    };
+
+    pub(crate) struct MyApp {
+        data: Vec<[f64; 2]>,
+    }
+
+    impl MyApp {
+        pub(crate) fn new(data: Vec<[f64; 2]>) -> Self {
+            Self { data }
+        }
+    }
+
+    impl App for MyApp {
+        fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+            egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+                egui::menu::bar(ui, |ui| {
+                    ui.menu_button("File", |ui| {
+                        if ui.button("Quit").clicked() {
+                            frame.close();
+                        }
+                    });
+                });
+            });
+
+            Window::new("plot window")
+                .default_size([400.0, 400.0])
+                .show(ctx, |ui| {
+                    Plot::new("job progress").show(ui, |plot_ui| {
+                        plot_ui.line(
+                            Line::new(PlotPoints::new(self.data.clone()))
+                                .color(Color32::from_rgb(200, 100, 100))
+                                .name("wave"),
+                        );
+                    });
+                });
+        }
+    }
+}
+
 fn main() -> anyhow::Result<()> {
     let project = Project::load("test.toml")?;
     let temp = tempdir()?;
 
-    let fetch = project.fetch(&temp);
+    let fetch = project.fetch(&temp)?;
 
-    if let Ok(f) = fetch {
-        println!("last modified at {m}", m = f.last_modified);
-        println!("contents:\n{c}", c = f.contents);
-    }
+    println!("last modified at {m}", m = fetch.last_modified);
+    println!("contents:\n{c}", c = fetch.contents);
+
+    let app = MyApp::new(fetch.parse());
+
+    const PROGRAM_TITLE: &str = "dash";
+    eframe::run_native(
+        PROGRAM_TITLE,
+        eframe::NativeOptions::default(),
+        Box::new(|_cc| Box::new(app)),
+    )
+    .unwrap();
 
     match remove_dir_all(temp) {
         Ok(_) => (),
