@@ -1,8 +1,11 @@
+#![feature(lazy_cell)]
+
 use std::{
     fs::{create_dir_all, read_to_string, remove_dir_all},
     io::{self, Read},
     path::Path,
     process::Command,
+    sync::LazyLock,
     time::Instant,
 };
 
@@ -135,7 +138,9 @@ impl Project {
     fn fetch(&self, temp: impl AsRef<Path>) -> anyhow::Result<Fetch> {
         let path = format!("{host}:{path}", host = self.host, path = self.path);
         let output = temp.as_ref().join("path.dat");
-        eprintln!("calling fetch on {path} at {}", Local::now());
+        if *DEBUG {
+            eprintln!("calling fetch on {path} at {}", Local::now());
+        }
         let mut cmd = Command::new("scp");
         cmd.arg("-p") // preserve mod times
             .arg(path)
@@ -167,6 +172,8 @@ impl Project {
         Ok(())
     }
 }
+
+static DEBUG: LazyLock<bool> = LazyLock::new(|| std::env::var("DEBUG").is_ok());
 
 fn main() -> anyhow::Result<()> {
     let temp = tempdir()?;
