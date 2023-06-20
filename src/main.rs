@@ -174,15 +174,46 @@ impl Project {
 }
 
 static DEBUG: LazyLock<bool> = LazyLock::new(|| std::env::var("DEBUG").is_ok());
+const PROGRAM_TITLE: &str = "dash";
+
+fn config_file() -> std::path::PathBuf {
+    let home = match std::env::var("HOME") {
+        Ok(v) => v,
+        Err(_) => panic!("no input file supplied and unable to read $HOME"),
+    };
+
+    Path::new(&home)
+        .join(".config")
+        .join(PROGRAM_TITLE)
+        .join("config.toml")
+}
 
 fn main() -> anyhow::Result<()> {
     let temp = tempdir()?;
 
-    let projects = Project::load("test.toml", &temp)?;
+    let args: Vec<_> = std::env::args().collect();
+
+    let infile = if args.len() == 2 {
+        if args[1] == "edit" {
+            let editor =
+                std::env::var("EDITOR").unwrap_or_else(|_| String::from("vim"));
+            let conf = config_file();
+            Command::new(editor).arg(conf).status()?;
+            return Ok(());
+        }
+        Path::new(&args[1]).to_path_buf()
+    } else {
+        let config = config_file();
+        if !config.exists() {
+            panic!("no input file supplied and none found at {config:?}");
+        }
+        config
+    };
+
+    let projects = Project::load(infile, &temp)?;
 
     let app = MyApp::new(temp.clone(), projects);
 
-    const PROGRAM_TITLE: &str = "dash";
     eframe::run_native(
         PROGRAM_TITLE,
         eframe::NativeOptions::default(),
