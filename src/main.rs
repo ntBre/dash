@@ -25,11 +25,22 @@ const fn default_interval() -> u64 {
     60
 }
 
+#[derive(Clone, Copy, Deserialize)]
+enum ProjectType {
+    #[serde(alias = "semp")]
+    Semp,
+    #[serde(alias = "pbqff")]
+    Pbqff,
+}
+
 #[derive(Clone, Deserialize)]
 struct Project {
     name: String,
     host: String,
     path: String,
+
+    #[serde(alias = "type")]
+    typ: ProjectType,
 
     #[serde(default = "Instant::now")]
     #[serde(skip_deserializing)]
@@ -52,7 +63,14 @@ struct Fetch {
 
 impl Fetch {
     /// parse `self` into a sequence of data points for plotting by egui
-    fn parse(&self) -> Vec<[f64; 2]> {
+    fn parse(&self, typ: ProjectType) -> Vec<[f64; 2]> {
+        match typ {
+            ProjectType::Semp => self.parse_semp(),
+            ProjectType::Pbqff => self.parse_pbqff(),
+        }
+    }
+
+    fn parse_semp(&self) -> Vec<[f64; 2]> {
         let mut i = 0;
         let mut ret = Vec::new();
         for line in self.contents.lines() {
@@ -64,6 +82,10 @@ impl Fetch {
             }
         }
         ret
+    }
+
+    fn parse_pbqff(&self) -> Vec<[f64; 2]> {
+        todo!()
     }
 }
 
@@ -120,7 +142,7 @@ impl Project {
 
     fn update(&mut self, temp: impl AsRef<Path>) -> anyhow::Result<()> {
         let fetch = self.fetch(temp)?;
-        let data = fetch.parse();
+        let data = fetch.parse(self.typ);
         self.data = data;
         self.last_updated = Instant::now();
         Ok(())
