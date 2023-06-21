@@ -52,10 +52,13 @@ pub(crate) struct Project {
     #[serde(default)]
     #[serde(skip_deserializing)]
     pub(crate) data: Vec<DataSet>,
+
+    #[serde(default)]
+    #[serde(skip_deserializing)]
+    pub(crate) last_modified: DateTime<Local>,
 }
 
 pub(crate) struct Fetch {
-    #[allow(unused)]
     pub(crate) last_modified: DateTime<Local>,
     pub(crate) contents: String,
 }
@@ -168,6 +171,7 @@ impl Project {
             last_updated: Instant::now(),
             update_interval: default_interval(),
             data: Vec::new(),
+            last_modified: Default::default(),
         }
     }
 
@@ -214,6 +218,7 @@ impl Project {
         let data = fetch.parse(self.typ);
         self.data = data;
         self.last_updated = Instant::now();
+        self.last_modified = fetch.last_modified;
         Ok(())
     }
 }

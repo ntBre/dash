@@ -148,6 +148,8 @@ impl App for MyApp {
             Window::new(&project.name)
                 .default_size([400.0, 400.0])
                 .show(ctx, |ui| {
+                    ui.label(format!("last updated {}", project.last_modified));
+
                     let response = Plot::new(&project.path)
                         // TODO remove this when I get an answer
                         // https://github.com/emilk/egui/discussions/3101 and
@@ -163,6 +165,7 @@ impl App for MyApp {
                             }
                         })
                         .response;
+
                     response.context_menu(|ui| {
                         if ui.button("ssh").clicked() {
                             let path = Path::new(&project.path);
