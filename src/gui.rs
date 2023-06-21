@@ -18,6 +18,12 @@ pub(crate) struct MyApp {
     projects: Vec<Project>,
     sender: Sender<(usize, PathBuf, Project)>,
     receiver: Receiver<(usize, Project)>,
+
+    show_add: bool,
+    show_add_name: String,
+    show_add_host: String,
+    show_add_path: String,
+    show_add_type: String,
 }
 
 impl MyApp {
@@ -37,6 +43,11 @@ impl MyApp {
             sender,
             receiver,
             temp,
+            show_add: false,
+            show_add_name: String::new(),
+            show_add_host: String::new(),
+            show_add_path: String::new(),
+            show_add_type: String::new(),
         }
     }
 
@@ -58,6 +69,44 @@ impl MyApp {
             .min()
             .unwrap_or_else(default_interval)
     }
+
+    fn add_project(&mut self, ctx: &egui::Context) {
+        Window::new("Add a project")
+            .default_size([200.0, 200.0])
+            .show(ctx, |ui| {
+                ui.label("name");
+                ui.text_edit_singleline(&mut self.show_add_name);
+
+                ui.label("host");
+                ui.text_edit_singleline(&mut self.show_add_host);
+
+                ui.label("path");
+                ui.text_edit_singleline(&mut self.show_add_path);
+
+                ui.label("type");
+                ui.text_edit_singleline(&mut self.show_add_type);
+
+                if ui.button("Add").clicked() {
+                    let typ = match self.show_add_type.as_str() {
+                        "pbqff" => ProjectType::Pbqff,
+                        "semp" => ProjectType::Semp,
+                        _ => panic!("invalid typ"),
+                    };
+                    self.projects.push(Project::new(
+                        std::mem::take(&mut self.show_add_name),
+                        std::mem::take(&mut self.show_add_host),
+                        std::mem::take(&mut self.show_add_path),
+                        typ,
+                    ));
+                    self.show_add_type.clear();
+                    self.request_update(self.projects.len() - 1);
+                }
+
+                if ui.button("Close").clicked() {
+                    self.show_add = false;
+                }
+            });
+    }
 }
 
 impl App for MyApp {
@@ -66,12 +115,19 @@ impl App for MyApp {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
+                    if ui.button("Add Project").clicked() {
+                        self.show_add = true;
+                    }
                     if ui.button("Quit").clicked() {
                         frame.close();
                     }
                 });
             });
         });
+
+        if self.show_add {
+            self.add_project(ctx);
+        }
 
         for i in 0..self.projects.len() {
             if self.projects[i].needs_update() {
