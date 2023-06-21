@@ -2,7 +2,7 @@ use std::{
     path::PathBuf,
     sync::mpsc::{channel, Receiver, Sender},
     thread,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use eframe::App;
@@ -54,6 +54,7 @@ impl MyApp {
 
 impl App for MyApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        ctx.request_repaint_after(Duration::from_secs(60));
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
