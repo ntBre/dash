@@ -48,3 +48,17 @@ to SSH/SCP files from, and `path` is the path to the appropriate output file at
 that path. `type` is currently either "pbqff" or "semp".
 
 You can also run `dash edit` to launch `$EDITOR` on the default config file.
+
+There are also global configuration options. For now, the only one is
+`terminal`, which defaults to `st`:
+
+```toml
+terminal = "st"
+
+[[project]]
+name = "Project name"
+host = "project-host-name"
+```
+
+This is used to SSH and cd directly to a project by right-clicking on one of the
+plots and selecting "ssh".
