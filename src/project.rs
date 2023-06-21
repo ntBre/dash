@@ -99,10 +99,28 @@ impl Fetch {
 
 #[derive(Deserialize)]
 pub(crate) struct Projects {
+    #[serde(default)]
     pub(crate) project: Vec<Project>,
 }
 
 impl Project {
+    pub(crate) fn new(
+        name: String,
+        host: String,
+        path: String,
+        typ: ProjectType,
+    ) -> Self {
+        Self {
+            name,
+            host,
+            path,
+            typ,
+            last_updated: Instant::now(),
+            update_interval: default_interval(),
+            data: Vec::new(),
+        }
+    }
+
     /// Deserialize a set of [Project]s from the TOML file at `path`, and update
     /// them using [Project::update].
     pub(crate) fn load(
