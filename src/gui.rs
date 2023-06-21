@@ -136,7 +136,6 @@ impl App for MyApp {
                 self.request_update(i);
             }
 
-            let project = &self.config.projects[i];
             let mut colors = [
                 Color32::RED,
                 Color32::GREEN,
@@ -145,11 +144,11 @@ impl App for MyApp {
             ]
             .into_iter()
             .cycle();
-            Window::new(&project.name)
+            Window::new(&self.config.projects[i].name)
                 .default_size([400.0, 400.0])
                 .show(ctx, |ui| {
+                    let project = &self.config.projects[i];
                     ui.label(format!("last updated {}", project.last_modified));
-
                     let response = Plot::new(&project.path)
                         // TODO remove this when I get an answer
                         // https://github.com/emilk/egui/discussions/3101 and
@@ -168,7 +167,7 @@ impl App for MyApp {
 
                     response.context_menu(|ui| {
                         if ui.button("ssh").clicked() {
-                            let path = Path::new(&project.path);
+                            let path = Path::new(&self.config.projects[i].path);
                             let dir = path.parent().unwrap();
                             let mut cmd = Command::new(&self.config.terminal);
                             cmd.arg("-e")
@@ -176,12 +175,16 @@ impl App for MyApp {
                                 .arg("-c")
                                 .arg(format!(
                                     "exec ssh -t {} 'cd {}; bash --login'",
-                                    project.host,
+                                    self.config.projects[i].host,
                                     dir.display()
                                 ))
                                 .stdout(Stdio::null())
                                 .stderr(Stdio::null());
                             cmd.spawn().unwrap();
+                        }
+                        if ui.button("Remove Project").clicked() {
+                            self.config.projects.remove(i);
+                            return;
                         }
                     });
                 });
