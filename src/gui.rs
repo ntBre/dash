@@ -127,73 +127,85 @@ impl App for MyApp {
             });
         });
 
-        if self.show_add {
-            self.add_project(ctx);
-        }
-
-        for i in 0..self.config.projects.len() {
-            if self.config.projects[i].needs_update() {
-                self.request_update(i);
+        egui::CentralPanel::default().show(ctx, |ui| {
+            let width = ui.available_width();
+            let height = ui.available_height();
+            if self.show_add {
+                self.add_project(ctx);
             }
 
-            let mut colors = [
-                Color32::RED,
-                Color32::GREEN,
-                Color32::from_rgb(0, 255, 255),
-                Color32::from_rgb(255, 0, 255),
-            ]
-            .into_iter()
-            .cycle();
-            Window::new(&self.config.projects[i].name)
-                .default_size([400.0, 400.0])
-                .show(ctx, |ui| {
-                    let project = &self.config.projects[i];
-                    ui.label(format!("last updated {}", project.last_modified));
-                    let response = Plot::new(&project.path)
-                        // TODO remove this when I get an answer
-                        // https://github.com/emilk/egui/discussions/3101 and
-                        // can handle zooming and right-clicking better
-                        .allow_boxed_zoom(false)
-                        .show(ui, |plot_ui| {
-                            for ds in &project.data {
-                                plot_ui.line(
-                                    Line::new(PlotPoints::new(ds.data.clone()))
+            for i in 0..self.config.projects.len() {
+                if self.config.projects[i].needs_update() {
+                    self.request_update(i);
+                }
+
+                let mut colors = [
+                    Color32::RED,
+                    Color32::GREEN,
+                    Color32::from_rgb(0, 255, 255),
+                    Color32::from_rgb(255, 0, 255),
+                ]
+                .into_iter()
+                .cycle();
+
+                Window::new(&self.config.projects[i].name)
+                    .default_size([width / 2.0, height / 2.0])
+                    .show(ctx, |ui| {
+                        let project = &self.config.projects[i];
+                        ui.label(format!(
+                            "last updated {}",
+                            project.last_modified
+                        ));
+                        let response = Plot::new(&project.path)
+                            // TODO remove this when I get an answer
+                            // https://github.com/emilk/egui/discussions/3101 and
+                            // can handle zooming and right-clicking better
+                            .allow_boxed_zoom(false)
+                            .show(ui, |plot_ui| {
+                                for ds in &project.data {
+                                    plot_ui.line(
+                                        Line::new(PlotPoints::new(
+                                            ds.data.clone(),
+                                        ))
                                         .color(colors.next().unwrap())
                                         .name(&ds.name),
-                                );
+                                    );
+                                }
+                            })
+                            .response;
+
+                        response.context_menu(|ui| {
+                            if ui.button("Force Update").clicked() {
+                                self.request_update(i);
                             }
-                        })
-                        .response;
-
-                    response.context_menu(|ui| {
-                        if ui.button("Force Update").clicked() {
-                            self.request_update(i);
-                        }
-                        if ui.button("SSH to Project").clicked() {
-                            let path = Path::new(&self.config.projects[i].path);
-                            let dir = path.parent().unwrap();
-                            let mut cmd = Command::new(&self.config.terminal);
-                            cmd.arg("-e")
-                                .arg("bash")
-                                .arg("-c")
-                                .arg(format!(
-                                    "exec ssh -t {} 'cd {}; bash --login'",
-                                    self.config.projects[i].host,
-                                    dir.display()
-                                ))
-                                .stdout(Stdio::null())
-                                .stderr(Stdio::null());
-                            cmd.spawn().unwrap();
-                        }
-                        if ui.button("Remove Project").clicked() {
-                            self.config.projects.remove(i);
-                        }
+                            if ui.button("SSH to Project").clicked() {
+                                let path =
+                                    Path::new(&self.config.projects[i].path);
+                                let dir = path.parent().unwrap();
+                                let mut cmd =
+                                    Command::new(&self.config.terminal);
+                                cmd.arg("-e")
+                                    .arg("bash")
+                                    .arg("-c")
+                                    .arg(format!(
+                                        "exec ssh -t {} 'cd {}; bash --login'",
+                                        self.config.projects[i].host,
+                                        dir.display()
+                                    ))
+                                    .stdout(Stdio::null())
+                                    .stderr(Stdio::null());
+                                cmd.spawn().unwrap();
+                            }
+                            if ui.button("Remove Project").clicked() {
+                                self.config.projects.remove(i);
+                            }
+                        });
                     });
-                });
-        }
+            }
 
-        while let Ok((idx, project)) = self.receiver.try_recv() {
-            self.config.projects[idx] = project;
-        }
+            while let Ok((idx, project)) = self.receiver.try_recv() {
+                self.config.projects[idx] = project;
+            }
+        });
     }
 }
