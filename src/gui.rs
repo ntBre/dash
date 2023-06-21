@@ -140,7 +140,7 @@ impl App for MyApp {
             let mut colors = [
                 Color32::RED,
                 Color32::GREEN,
-                Color32::BLUE,
+                Color32::from_rgb(0, 255, 255),
                 Color32::from_rgb(255, 0, 255),
             ]
             .into_iter()
