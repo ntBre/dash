@@ -1,4 +1,4 @@
-#![feature(lazy_cell)]
+#![feature(file_create_new, lazy_cell)]
 
 use std::{
     fs::{create_dir_all, remove_dir_all},
@@ -55,7 +55,15 @@ fn main() -> anyhow::Result<()> {
     } else {
         let config = config_file();
         if !config.exists() {
-            panic!("no input file supplied and none found at {config:?}");
+            eprintln!("no config file found, attempting to make one");
+            if let Some(dir) = config.parent() {
+                std::fs::create_dir_all(dir).unwrap_or_else(|e| {
+                    panic!("failed to create {dir:?} with {e}")
+                });
+            }
+            std::fs::File::create_new(&config).unwrap_or_else(|e| {
+                panic!("failed to create {config:?} with {e}")
+            });
         }
         config
     };
