@@ -11,7 +11,7 @@ use egui::{
     Color32, Window,
 };
 
-use crate::Project;
+use crate::project::{Project, ProjectType};
 
 pub(crate) struct MyApp {
     temp: PathBuf,
@@ -22,8 +22,7 @@ pub(crate) struct MyApp {
 
 impl MyApp {
     pub(crate) fn new(temp: PathBuf, projects: Vec<Project>) -> Self {
-        let (sender, inner_receiver) =
-            channel::<(usize, PathBuf, super::Project)>();
+        let (sender, inner_receiver) = channel::<(usize, PathBuf, Project)>();
         let (inner_sender, receiver) = channel();
 
         thread::spawn(move || {
