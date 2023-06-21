@@ -71,6 +71,10 @@ impl App for MyApp {
             }
 
             let project = &self.projects[i];
+            let name = match project.typ {
+                ProjectType::Semp => "RMSD",
+                ProjectType::Pbqff => "jobs remaining",
+            };
             Window::new(&project.name)
                 .default_size([400.0, 400.0])
                 .show(ctx, |ui| {
@@ -78,7 +82,7 @@ impl App for MyApp {
                         plot_ui.line(
                             Line::new(PlotPoints::new(project.data.clone()))
                                 .color(Color32::from_rgb(200, 100, 100))
-                                .name("wave"),
+                                .name(name),
                         );
                     });
                 });
