@@ -60,72 +60,79 @@ pub(crate) struct Project {
 
 pub(crate) struct Fetch {
     pub(crate) last_modified: DateTime<Local>,
-    pub(crate) contents: String,
+    pub(crate) data: Vec<DataSet>,
 }
 
-impl Fetch {
-    /// parse `self` into a sequence of data points for plotting by egui
-    pub(crate) fn parse(&self, typ: ProjectType) -> Vec<DataSet> {
-        match typ {
-            ProjectType::Semp => self.parse_semp(),
-            ProjectType::Pbqff => self.parse_pbqff(),
-        }
+/// parse a semp freqs.log file
+pub(crate) fn parse_freqs(contents: String) -> DataSet {
+    let mut mae = DataSet {
+        name: "MAE".to_owned(),
+        data: Vec::new(),
+    };
+    for line in contents.lines() {
+        let sp: Vec<_> = line.split_ascii_whitespace().collect();
+        mae.data.push([
+            sp[0].parse().unwrap(),
+            sp.last().unwrap().parse().unwrap(),
+        ]);
     }
+    mae
+}
 
-    pub(crate) fn parse_semp(&self) -> Vec<DataSet> {
-        let mut i = 0;
-        let mut norm = DataSet {
-            name: "Norm".to_owned(),
-            data: Vec::new(),
-        };
-        let mut rmsd = DataSet {
-            name: "RMSD".to_owned(),
-            data: Vec::new(),
-        };
-        let mut max = DataSet {
-            name: "MAX".to_owned(),
-            data: Vec::new(),
-        };
-        for line in self.contents.lines() {
-            let mut sp = line.split_ascii_whitespace();
-            if sp.next().is_some_and(|s| s.chars().all(|c| c.is_numeric())) {
-                let n = sp.next().unwrap().parse().unwrap();
-                norm.data.push([i as f64, n]);
-                let r = sp.nth(1).unwrap().parse().unwrap();
-                rmsd.data.push([i as f64, r]);
-                let m = sp.nth(1).unwrap().parse().unwrap();
-                max.data.push([i as f64, m]);
-                i += 1;
-            }
+/// parse a semp output file
+pub(crate) fn parse_semp(contents: String) -> Vec<DataSet> {
+    let mut i = 0;
+    let mut norm = DataSet {
+        name: "Norm".to_owned(),
+        data: Vec::new(),
+    };
+    let mut rmsd = DataSet {
+        name: "RMSD".to_owned(),
+        data: Vec::new(),
+    };
+    let mut max = DataSet {
+        name: "MAX".to_owned(),
+        data: Vec::new(),
+    };
+    for line in contents.lines() {
+        let mut sp = line.split_ascii_whitespace();
+        if sp.next().is_some_and(|s| s.chars().all(|c| c.is_numeric())) {
+            let n = sp.next().unwrap().parse().unwrap();
+            norm.data.push([i as f64, n]);
+            let r = sp.nth(1).unwrap().parse().unwrap();
+            rmsd.data.push([i as f64, r]);
+            let m = sp.nth(1).unwrap().parse().unwrap();
+            max.data.push([i as f64, m]);
+            i += 1;
         }
-        vec![norm, rmsd, max]
     }
+    vec![norm, rmsd, max]
+}
 
-    pub(crate) fn parse_pbqff(&self) -> Vec<DataSet> {
-        let mut ret = DataSet {
-            name: "Points remaining".to_owned(),
-            data: Vec::new(),
-        };
-        let mut did_drop = false;
-        for line in self.contents.lines() {
-            if line.starts_with("finished dropping") {
-                did_drop = true;
-            }
-            if line.starts_with("[iter ") {
-                // only track the current phase of the QFF. if we dropped and
-                // found more [iter ...] lines, we've entered a new phase
-                if did_drop {
-                    did_drop = false;
-                    ret.data.clear();
-                }
-                let sp: Vec<_> = line.split_ascii_whitespace().collect();
-                let i = sp[1].parse().unwrap();
-                let remaining = sp[7].parse().unwrap();
-                ret.data.push([i, remaining]);
-            }
+pub(crate) fn parse_pbqff(contents: String) -> Vec<DataSet> {
+    let mut ret = DataSet {
+        name: "Points remaining".to_owned(),
+        data: Vec::new(),
+    };
+    let mut did_drop = false;
+    for line in contents.lines() {
+        if line.starts_with("finished dropping") {
+            did_drop = true;
         }
-        vec![ret]
+        if line.starts_with("[iter ") {
+            // only track the current phase of the QFF. if we dropped and
+            // found more [iter ...] lines, we've entered a new phase
+            if did_drop {
+                did_drop = false;
+                ret.data.clear();
+            }
+            let sp: Vec<_> = line.split_ascii_whitespace().collect();
+            let i = sp[1].parse().unwrap();
+            let remaining = sp[7].parse().unwrap();
+            ret.data.push([i, remaining]);
+        }
     }
+    vec![ret]
 }
 
 #[derive(Deserialize)]
@@ -199,9 +206,37 @@ impl Project {
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
 
+        let data = match self.typ {
+            ProjectType::Semp => {
+                let mut data = parse_semp(contents);
+                // this will be the path of the semp.out file, so get the parent
+                // directory and then re-join freqs.log
+                let path = Path::new(&self.path);
+                let freqs = path.parent().unwrap().join("freqs.log");
+                let path = format!(
+                    "{host}:{path}",
+                    host = self.host,
+                    path = freqs.display()
+                );
+                let output = temp.as_ref().join("freqs.log");
+                let mut cmd = Command::new("scp");
+                cmd.arg("-p") // preserve mod times
+                    .arg("-C") // use compression
+                    .arg(path)
+                    .arg(&output);
+                cmd.status()?;
+                let mut file = std::fs::File::open(output)?;
+                let mut contents = String::new();
+                file.read_to_string(&mut contents)?;
+                data.push(parse_freqs(contents));
+                data
+            }
+            ProjectType::Pbqff => parse_pbqff(contents),
+        };
+
         Ok(Fetch {
             last_modified,
-            contents,
+            data,
         })
     }
 
@@ -214,11 +249,13 @@ impl Project {
         &mut self,
         temp: impl AsRef<Path>,
     ) -> anyhow::Result<()> {
-        let fetch = self.fetch(temp)?;
-        let data = fetch.parse(self.typ);
+        let Fetch {
+            last_modified,
+            data,
+        } = self.fetch(temp)?;
         self.data = data;
         self.last_updated = Instant::now();
-        self.last_modified = fetch.last_modified;
+        self.last_modified = last_modified;
         Ok(())
     }
 }
