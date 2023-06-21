@@ -184,6 +184,7 @@ impl Project {
         }
         let mut cmd = Command::new("scp");
         cmd.arg("-p") // preserve mod times
+            .arg("-C") // use compression
             .arg(path)
             .arg(&output);
         cmd.status()?;
