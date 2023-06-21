@@ -14,6 +14,10 @@ pub(crate) const fn default_interval() -> u64 {
     600
 }
 
+fn default_terminal() -> String {
+    "st".to_string()
+}
+
 #[derive(Clone, Copy, Deserialize)]
 pub(crate) enum ProjectType {
     #[serde(alias = "semp")]
@@ -102,6 +106,9 @@ pub(crate) struct Config {
     #[serde(default)]
     #[serde(rename = "project")]
     pub(crate) projects: Vec<Project>,
+
+    #[serde(default = "default_terminal")]
+    pub(crate) terminal: String,
 }
 
 impl Config {

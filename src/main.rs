@@ -25,7 +25,6 @@ fn tempdir() -> io::Result<std::path::PathBuf> {
 
 static DEBUG: LazyLock<bool> = LazyLock::new(|| std::env::var("DEBUG").is_ok());
 const PROGRAM_TITLE: &str = "dash";
-const TERMINAL: &str = "st";
 
 fn config_file() -> std::path::PathBuf {
     let home = match std::env::var("HOME") {

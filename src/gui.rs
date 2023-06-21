@@ -12,10 +12,7 @@ use egui::{
     Color32, Window,
 };
 
-use crate::{
-    project::{default_interval, Config, Project, ProjectType},
-    TERMINAL,
-};
+use crate::project::{default_interval, Config, Project, ProjectType};
 
 pub(crate) struct MyApp {
     temp: PathBuf,
@@ -166,7 +163,7 @@ impl App for MyApp {
                         if ui.button("ssh").clicked() {
                             let path = Path::new(&project.path);
                             let dir = path.parent().unwrap();
-                            let mut cmd = Command::new(TERMINAL);
+                            let mut cmd = Command::new(&self.config.terminal);
                             cmd.arg("-e")
                                 .arg("bash")
                                 .arg("-c")
