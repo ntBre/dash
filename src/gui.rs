@@ -11,7 +11,7 @@ use egui::{
     Color32, Window,
 };
 
-use crate::project::{Project, ProjectType};
+use crate::project::{default_interval, Project, ProjectType};
 
 pub(crate) struct MyApp {
     temp: PathBuf,
@@ -50,11 +50,19 @@ impl MyApp {
             .send((idx, self.temp.clone(), p.clone()))
             .unwrap();
     }
+
+    fn min_timeout(&self) -> u64 {
+        self.projects
+            .iter()
+            .map(|p| p.update_interval)
+            .min()
+            .unwrap_or_else(default_interval)
+    }
 }
 
 impl App for MyApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        ctx.request_repaint_after(Duration::from_secs(60));
+        ctx.request_repaint_after(Duration::from_secs(self.min_timeout()));
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
