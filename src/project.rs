@@ -26,6 +26,12 @@ pub(crate) enum ProjectType {
     Pbqff,
 }
 
+#[derive(Clone, Default, Deserialize)]
+pub(crate) struct DataSet {
+    pub(crate) name: String,
+    pub(crate) data: Vec<[f64; 2]>,
+}
+
 #[derive(Clone, Deserialize)]
 pub(crate) struct Project {
     pub(crate) name: String,
@@ -45,7 +51,7 @@ pub(crate) struct Project {
 
     #[serde(default)]
     #[serde(skip_deserializing)]
-    pub(crate) data: Vec<[f64; 2]>,
+    pub(crate) data: Vec<DataSet>,
 }
 
 pub(crate) struct Fetch {
@@ -56,29 +62,47 @@ pub(crate) struct Fetch {
 
 impl Fetch {
     /// parse `self` into a sequence of data points for plotting by egui
-    pub(crate) fn parse(&self, typ: ProjectType) -> Vec<[f64; 2]> {
+    pub(crate) fn parse(&self, typ: ProjectType) -> Vec<DataSet> {
         match typ {
             ProjectType::Semp => self.parse_semp(),
             ProjectType::Pbqff => self.parse_pbqff(),
         }
     }
 
-    pub(crate) fn parse_semp(&self) -> Vec<[f64; 2]> {
+    pub(crate) fn parse_semp(&self) -> Vec<DataSet> {
         let mut i = 0;
-        let mut ret = Vec::new();
+        let mut norm = DataSet {
+            name: "Norm".to_owned(),
+            data: Vec::new(),
+        };
+        let mut rmsd = DataSet {
+            name: "RMSD".to_owned(),
+            data: Vec::new(),
+        };
+        let mut max = DataSet {
+            name: "MAX".to_owned(),
+            data: Vec::new(),
+        };
         for line in self.contents.lines() {
             let mut sp = line.split_ascii_whitespace();
             if sp.next().is_some_and(|s| s.chars().all(|c| c.is_numeric())) {
-                let s = sp.next().unwrap().parse().unwrap();
-                ret.push([i as f64, s]);
+                let n = sp.next().unwrap().parse().unwrap();
+                norm.data.push([i as f64, n]);
+                let r = sp.nth(1).unwrap().parse().unwrap();
+                rmsd.data.push([i as f64, r]);
+                let m = sp.nth(1).unwrap().parse().unwrap();
+                max.data.push([i as f64, m]);
                 i += 1;
             }
         }
-        ret
+        vec![norm, rmsd, max]
     }
 
-    pub(crate) fn parse_pbqff(&self) -> Vec<[f64; 2]> {
-        let mut ret = Vec::new();
+    pub(crate) fn parse_pbqff(&self) -> Vec<DataSet> {
+        let mut ret = DataSet {
+            name: "Points remaining".to_owned(),
+            data: Vec::new(),
+        };
         let mut did_drop = false;
         for line in self.contents.lines() {
             if line.starts_with("finished dropping") {
@@ -89,15 +113,15 @@ impl Fetch {
                 // found more [iter ...] lines, we've entered a new phase
                 if did_drop {
                     did_drop = false;
-                    ret.clear();
+                    ret.data.clear();
                 }
                 let sp: Vec<_> = line.split_ascii_whitespace().collect();
                 let i = sp[1].parse().unwrap();
                 let remaining = sp[7].parse().unwrap();
-                ret.push([i, remaining]);
+                ret.data.push([i, remaining]);
             }
         }
-        ret
+        vec![ret]
     }
 }
 

@@ -137,10 +137,14 @@ impl App for MyApp {
             }
 
             let project = &self.config.projects[i];
-            let name = match project.typ {
-                ProjectType::Semp => "RMSD",
-                ProjectType::Pbqff => "jobs remaining",
-            };
+            let mut colors = [
+                Color32::RED,
+                Color32::GREEN,
+                Color32::BLUE,
+                Color32::from_rgb(255, 0, 255),
+            ]
+            .into_iter()
+            .cycle();
             Window::new(&project.name)
                 .default_size([400.0, 400.0])
                 .show(ctx, |ui| {
@@ -150,13 +154,13 @@ impl App for MyApp {
                         // can handle zooming and right-clicking better
                         .allow_boxed_zoom(false)
                         .show(ui, |plot_ui| {
-                            plot_ui.line(
-                                Line::new(PlotPoints::new(
-                                    project.data.clone(),
-                                ))
-                                .color(Color32::from_rgb(200, 100, 100))
-                                .name(name),
-                            );
+                            for ds in &project.data {
+                                plot_ui.line(
+                                    Line::new(PlotPoints::new(ds.data.clone()))
+                                        .color(colors.next().unwrap())
+                                        .name(&ds.name),
+                                );
+                            }
                         })
                         .response;
                     response.context_menu(|ui| {
