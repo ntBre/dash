@@ -1,3 +1,5 @@
+use std::ffi::OsStr;
+use std::fmt::Display;
 use std::fs::read_to_string;
 use std::io::Read;
 use std::path::Path;
@@ -163,6 +165,23 @@ impl Config {
     }
 }
 
+/// run `scp -p -C host:path output`
+fn scp<D, E, P>(host: D, path: E, output: P) -> anyhow::Result<()>
+where
+    D: Display,
+    E: Display,
+    P: AsRef<OsStr>,
+{
+    let path = format!("{host}:{path}");
+    let mut cmd = Command::new("scp");
+    cmd.arg("-p") // preserve mod times
+        .arg("-C") // use compression
+        .arg(path)
+        .arg(&output);
+    cmd.status()?;
+    Ok(())
+}
+
 impl Project {
     pub(crate) fn new(
         name: String,
@@ -188,17 +207,18 @@ impl Project {
         &self,
         temp: impl AsRef<Path>,
     ) -> anyhow::Result<Fetch> {
-        let path = format!("{host}:{path}", host = self.host, path = self.path);
-        let output = temp.as_ref().join("path.dat");
         if *DEBUG {
-            eprintln!("calling fetch on {path} at {}", Local::now());
+            eprintln!(
+                "calling fetch on {host}{path} at {}",
+                Local::now(),
+                host = self.host,
+                path = self.path,
+            );
         }
-        let mut cmd = Command::new("scp");
-        cmd.arg("-p") // preserve mod times
-            .arg("-C") // use compression
-            .arg(path)
-            .arg(&output);
-        cmd.status()?;
+
+        let output = temp.as_ref().join("path.dat");
+        scp(&self.host, &self.path, &output)?;
+
         let mut file = std::fs::File::open(output)?;
         let meta = file.metadata()?;
         let modified = meta.modified()?;
@@ -213,18 +233,8 @@ impl Project {
                 // directory and then re-join freqs.log
                 let path = Path::new(&self.path);
                 let freqs = path.parent().unwrap().join("freqs.log");
-                let path = format!(
-                    "{host}:{path}",
-                    host = self.host,
-                    path = freqs.display()
-                );
                 let output = temp.as_ref().join("freqs.log");
-                let mut cmd = Command::new("scp");
-                cmd.arg("-p") // preserve mod times
-                    .arg("-C") // use compression
-                    .arg(path)
-                    .arg(&output);
-                cmd.status()?;
+                scp(&self.host, freqs.display(), &output)?;
                 let mut file = std::fs::File::open(output)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
