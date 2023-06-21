@@ -166,7 +166,10 @@ impl App for MyApp {
                         .response;
 
                     response.context_menu(|ui| {
-                        if ui.button("ssh").clicked() {
+                        if ui.button("Force Update").clicked() {
+                            self.request_update(i);
+                        }
+                        if ui.button("SSH to Project").clicked() {
                             let path = Path::new(&self.config.projects[i].path);
                             let dir = path.parent().unwrap();
                             let mut cmd = Command::new(&self.config.terminal);
