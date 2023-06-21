@@ -1,5 +1,6 @@
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
     sync::mpsc::{channel, Receiver, Sender},
     thread,
     time::{Duration, Instant},
@@ -11,7 +12,10 @@ use egui::{
     Color32, Window,
 };
 
-use crate::project::{default_interval, Project, ProjectType};
+use crate::{
+    project::{default_interval, Project, ProjectType},
+    TERMINAL,
+};
 
 pub(crate) struct MyApp {
     temp: PathBuf,
@@ -142,12 +146,38 @@ impl App for MyApp {
             Window::new(&project.name)
                 .default_size([400.0, 400.0])
                 .show(ctx, |ui| {
-                    Plot::new(&project.path).show(ui, |plot_ui| {
-                        plot_ui.line(
-                            Line::new(PlotPoints::new(project.data.clone()))
+                    let response = Plot::new(&project.path)
+                        // TODO remove this when I get an answer
+                        // https://github.com/emilk/egui/discussions/3101 and
+                        // can handle zooming and right-clicking better
+                        .allow_boxed_zoom(false)
+                        .show(ui, |plot_ui| {
+                            plot_ui.line(
+                                Line::new(PlotPoints::new(
+                                    project.data.clone(),
+                                ))
                                 .color(Color32::from_rgb(200, 100, 100))
                                 .name(name),
-                        );
+                            );
+                        })
+                        .response;
+                    response.context_menu(|ui| {
+                        if ui.button("ssh").clicked() {
+                            let path = Path::new(&project.path);
+                            let dir = path.parent().unwrap();
+                            let mut cmd = Command::new(TERMINAL);
+                            cmd.arg("-e")
+                                .arg("bash")
+                                .arg("-c")
+                                .arg(format!(
+                                    "exec ssh -t {} 'cd {}; bash --login'",
+                                    project.host,
+                                    dir.display()
+                                ))
+                                .stdout(Stdio::null())
+                                .stderr(Stdio::null());
+                            cmd.spawn().unwrap();
+                        }
                     });
                 });
         }
