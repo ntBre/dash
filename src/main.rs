@@ -9,6 +9,7 @@ use std::{
 };
 
 use gui::MyApp;
+use project::Config;
 
 mod gui;
 mod project;
@@ -60,7 +61,7 @@ fn main() -> anyhow::Result<()> {
         config
     };
 
-    let projects = project::Project::load(infile, &temp)?;
+    let projects = Config::load(infile, &temp)?;
 
     let app = MyApp::new(temp.clone(), projects);
 

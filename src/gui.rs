@@ -13,13 +13,13 @@ use egui::{
 };
 
 use crate::{
-    project::{default_interval, Project, ProjectType},
+    project::{default_interval, Config, Project, ProjectType},
     TERMINAL,
 };
 
 pub(crate) struct MyApp {
     temp: PathBuf,
-    projects: Vec<Project>,
+    config: Config,
     sender: Sender<(usize, PathBuf, Project)>,
     receiver: Receiver<(usize, Project)>,
 
@@ -31,7 +31,7 @@ pub(crate) struct MyApp {
 }
 
 impl MyApp {
-    pub(crate) fn new(temp: PathBuf, projects: Vec<Project>) -> Self {
+    pub(crate) fn new(temp: PathBuf, config: Config) -> Self {
         let (sender, inner_receiver) = channel::<(usize, PathBuf, Project)>();
         let (inner_sender, receiver) = channel();
 
@@ -43,7 +43,7 @@ impl MyApp {
         });
 
         Self {
-            projects,
+            config,
             sender,
             receiver,
             temp,
@@ -59,15 +59,16 @@ impl MyApp {
     fn request_update(&mut self, idx: usize) {
         // set this here so we don't keep queueing updates on the same
         // project
-        self.projects[idx].last_updated = Instant::now();
-        let p = &self.projects[idx];
+        self.config.projects[idx].last_updated = Instant::now();
+        let p = &self.config.projects[idx];
         self.sender
             .send((idx, self.temp.clone(), p.clone()))
             .unwrap();
     }
 
     fn min_timeout(&self) -> u64 {
-        self.projects
+        self.config
+            .projects
             .iter()
             .map(|p| p.update_interval)
             .min()
@@ -96,14 +97,14 @@ impl MyApp {
                         "semp" => ProjectType::Semp,
                         _ => panic!("invalid typ"),
                     };
-                    self.projects.push(Project::new(
+                    self.config.projects.push(Project::new(
                         std::mem::take(&mut self.show_add_name),
                         std::mem::take(&mut self.show_add_host),
                         std::mem::take(&mut self.show_add_path),
                         typ,
                     ));
                     self.show_add_type.clear();
-                    self.request_update(self.projects.len() - 1);
+                    self.request_update(self.config.projects.len() - 1);
                 }
 
                 if ui.button("Close").clicked() {
@@ -133,12 +134,12 @@ impl App for MyApp {
             self.add_project(ctx);
         }
 
-        for i in 0..self.projects.len() {
-            if self.projects[i].needs_update() {
+        for i in 0..self.config.projects.len() {
+            if self.config.projects[i].needs_update() {
                 self.request_update(i);
             }
 
-            let project = &self.projects[i];
+            let project = &self.config.projects[i];
             let name = match project.typ {
                 ProjectType::Semp => "RMSD",
                 ProjectType::Pbqff => "jobs remaining",
@@ -183,7 +184,7 @@ impl App for MyApp {
         }
 
         while let Ok((idx, project)) = self.receiver.try_recv() {
-            self.projects[idx] = project;
+            self.config.projects[idx] = project;
         }
     }
 }

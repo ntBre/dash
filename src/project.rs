@@ -98,9 +98,28 @@ impl Fetch {
 }
 
 #[derive(Deserialize)]
-pub(crate) struct Projects {
+pub(crate) struct Config {
     #[serde(default)]
-    pub(crate) project: Vec<Project>,
+    #[serde(rename = "project")]
+    pub(crate) projects: Vec<Project>,
+}
+
+impl Config {
+    /// Deserialize a set of [Project]s from the TOML file at `path`, and update
+    /// them using [Project::update].
+    pub(crate) fn load(
+        path: impl AsRef<Path>,
+        temp: impl AsRef<Path>,
+    ) -> anyhow::Result<Self> {
+        let toml = read_to_string(path)?;
+        let mut projects: Config = toml::from_str(&toml)?;
+
+        for p in projects.projects.iter_mut() {
+            p.update(&temp)?;
+        }
+
+        Ok(projects)
+    }
 }
 
 impl Project {
@@ -119,22 +138,6 @@ impl Project {
             update_interval: default_interval(),
             data: Vec::new(),
         }
-    }
-
-    /// Deserialize a set of [Project]s from the TOML file at `path`, and update
-    /// them using [Project::update].
-    pub(crate) fn load(
-        path: impl AsRef<Path>,
-        temp: impl AsRef<Path>,
-    ) -> anyhow::Result<Vec<Self>> {
-        let toml = read_to_string(path)?;
-        let mut projects: Projects = toml::from_str(&toml)?;
-
-        for p in projects.project.iter_mut() {
-            p.update(&temp)?;
-        }
-
-        Ok(projects.project)
     }
 
     /// Retrieve the remote files for `self`, storing temporary files in `temp`.
