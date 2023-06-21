@@ -11,7 +11,7 @@ use serde::Deserialize;
 use super::DEBUG;
 
 pub(crate) const fn default_interval() -> u64 {
-    60
+    600
 }
 
 #[derive(Clone, Copy, Deserialize)]
