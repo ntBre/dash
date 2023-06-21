@@ -25,6 +25,10 @@ pub(crate) struct MyApp {
     show_add_host: String,
     show_add_path: String,
     show_add_type: String,
+
+    /// vec of indices to delete from config.projects at the end of the plotting
+    /// loop
+    to_delete: Vec<usize>,
 }
 
 impl MyApp {
@@ -49,6 +53,7 @@ impl MyApp {
             show_add_host: String::new(),
             show_add_path: String::new(),
             show_add_type: String::new(),
+            to_delete: Vec::new(),
         }
     }
 
@@ -108,6 +113,19 @@ impl MyApp {
                     self.show_add = false;
                 }
             });
+    }
+
+    fn request_removal(&mut self, idx: usize) {
+        self.to_delete.push(idx);
+    }
+
+    fn do_removal(&mut self) {
+        // sort into descending order to remove from the end
+        self.to_delete.sort_by(|a, b| b.cmp(a));
+        let to_delete = std::mem::take(&mut self.to_delete);
+        for i in to_delete {
+            self.config.projects.remove(i);
+        }
     }
 }
 
@@ -197,11 +215,13 @@ impl App for MyApp {
                                 cmd.spawn().unwrap();
                             }
                             if ui.button("Remove Project").clicked() {
-                                self.config.projects.remove(i);
+                                self.request_removal(i);
                             }
                         });
                     });
             }
+
+            self.do_removal();
 
             while let Ok((idx, project)) = self.receiver.try_recv() {
                 self.config.projects[idx] = project;
