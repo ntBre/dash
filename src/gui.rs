@@ -184,7 +184,6 @@ impl App for MyApp {
                         }
                         if ui.button("Remove Project").clicked() {
                             self.config.projects.remove(i);
-                            return;
                         }
                     });
                 });
