@@ -49,6 +49,9 @@ that path. `type` is currently either "pbqff" or "semp".
 
 You can also run `dash edit` to launch `$EDITOR` on the default config file.
 
+If the default config file doesn't exist, `dash` will try to create one along
+with its parent directories.
+
 There are also global configuration options. For now, the only one is
 `terminal`, which defaults to `st`:
 
