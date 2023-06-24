@@ -1,8 +1,15 @@
+//! Improvements:
+//!
+//! Request update on initial project set instead of downloading up font in load
+//!
+//! Try to check hash of file before copying it over (sha1sum?), although that
+//! will likely add at least one ssh call
+
 #![feature(file_create_new, lazy_cell)]
 
 use std::{
     fs::{create_dir_all, remove_dir_all},
-    io::{self},
+    io,
     path::Path,
     process::Command,
     sync::LazyLock,
